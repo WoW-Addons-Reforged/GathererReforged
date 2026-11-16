@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Fishing School Recording (`Core/GatherScanner.lua`)**: Fixed `processLoot()` rejecting fishing pool loot because `GetLootSourceInfo(1)` does not return a `GameObject-` GUID for `IsFishingLoot()`, added `lastPoolTip` fallback and `C_Spell.GetSpellInfo` support, preserved `lastPoolTip` across brief unit mouseovers, and expanded German fishing pool keywords (`trümmer`, `elementar`, `schlamm`, `ölig`).
+
+### Fixed
+- **Fishing School / Pool Recording & Live Bridge (`Core/GatherScanner.lua`, `Data/GatherNodes.lua`, `Core/GatherIntegrations.lua`)**:
+  - Replaced the unconditional `IsFishingLoot()` early return in `processLoot()` so **Fishing Schools / Pools / Wreckage** are recorded with their exact coordinates, primary fish icon, and loot drops, while open-water fishing without a hovered pool continues to be ignored.
+  - Added dedicated `FISHING_SPELLS` detection (including empty-target `UNIT_SPELLCAST_SENT` casts and fishing spell icons), `lastPoolTip` / `lastFishingCast` tracking across bobber hover/cast duration, multilingual pool keyword matching, and bobber-name filtering.
+  - Added `allowDynamicOpen` support in `Gatherer.Nodes.RegisterDynamicNode` for verified fishing pools and live-bridged `"Fishing"` nodes from GatherMate2 / GatherRadar.
 - **Dynamic Addon Version in Tooltip (`Core/GatherMain.lua`)**: Read `Gatherer.Var.Version` directly from `GathererReforged.toc` metadata (`C_AddOns.GetAddOnMetadata` / `GetAddOnMetadata`) instead of a hardcoded `"1.0.4"` string so the LDB tooltip always matches the `.toc` version.
 
 ## [1.0.5] - 2026-11-14

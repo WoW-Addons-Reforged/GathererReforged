@@ -13,8 +13,10 @@ local Scanner = Gatherer.Scanner
 
 local hooks = {}
 local lastTip = { tip = nil, time = 0, gType = nil, isRedReq = false }
+local lastPoolTip = { tip = nil, time = 0, objId = nil }
 local lastClick = { tip = nil, time = 0, gType = nil }
 local lastCast = { target = nil, spellID = nil, gType = nil, time = 0 }
+local lastFishingCast = { time = 0, spellID = nil, poolName = nil, poolId = nil }
 local lootProcessed = false
 
 -- Known gathering spell IDs and textures across all WoW versions
@@ -36,13 +38,58 @@ local ARCH_SPELLS = {
 	[73979] = true, [92828] = true,
 }
 
-local OPEN_SPELLS = {
-	[3365] = true, [6247] = true, [6477] = true, [6478] = true, [22810] = true,
-	-- Fishing (schools / wreckage) & Engineering Gas Cloud extraction & Logging
+local FISHING_SPELLS = {
 	[7620] = true, [7731] = true, [7732] = true, [18248] = true, [33095] = true,
 	[51294] = true, [88868] = true, [110410] = true, [131474] = true, [131476] = true,
-	[131490] = true, [158743] = true, [30427] = true, [167895] = true, [167898] = true,
+	[131490] = true, [158743] = true, [271616] = true, [271990] = true, [377895] = true,
 }
+
+local OPEN_SPELLS = {
+	[3365] = true, [6247] = true, [6477] = true, [6478] = true, [22810] = true,
+	-- Engineering Gas Cloud extraction & Logging
+	[30427] = true, [167895] = true, [167898] = true,
+}
+
+local FISHING_BOBBER_NAMES = {
+	["fishing bobber"] = true,
+	["schwimmer"] = true,
+	["bouchon"] = true,
+	["corcho"] = true,
+	["boia"] = true,
+	["galleggiante"] = true,
+	["поплавок"] = true,
+	["낚시찌"] = true,
+	["鱼漂"] = true,
+	["浮標"] = true,
+}
+
+local FISHING_POOL_KEYWORDS = {
+	"school", "wreckage", "debris", "shoal", "pure water", "flotsam", "pool", "swarm",
+	"schwarm", "wrack", "treibgut", "teich", "reines wasser", "trümmer", "elementar", "schlamm", "ölig",
+	"banc", "débris", "épave", "eau pure",
+	"banco", "restos", "escombros", "agua pura", "cardumen",
+	"cardume", "destroços", "água pura",
+	"relitto", "detriti",
+	"косяк", "обломки", "чистая вода",
+	"떼", "잔해",
+	"鱼群", "魚群", "残骸", "殘骸",
+}
+
+local function isFishingBobberName(name)
+	if not name or name == "" then return false end
+	return FISHING_BOBBER_NAMES[name:lower()] == true
+end
+
+local function isFishingPoolName(name)
+	if not name or name == "" or isFishingBobberName(name) then return false end
+	local low = name:lower()
+	for _, kw in ipairs(FISHING_POOL_KEYWORDS) do
+		if low:find(kw, 1, true) then
+			return true
+		end
+	end
+	return false
+end
 
 local function isSafeString(val)
 	if Gatherer and Gatherer.IsSafeString then
@@ -70,15 +117,28 @@ local function detectGatherTypeFromSpell(spellID)
 	if MINE_SPELLS[spellID] then return "MINE" end
 	if HERB_SPELLS[spellID] then return "HERB" end
 	if ARCH_SPELLS[spellID] then return "ARCH" end
+	if FISHING_SPELLS[spellID] then return "FISH" end
 	if OPEN_SPELLS[spellID] then return "OPEN" end
 
-	local name, _, icon = GetSpellInfo(spellID)
+	local name, icon
+	if C_Spell and C_Spell.GetSpellInfo then
+		local info = C_Spell.GetSpellInfo(spellID)
+		if info then
+			name = info.name
+			icon = info.iconID
+		end
+	elseif GetSpellInfo then
+		local sName, _, sIcon = GetSpellInfo(spellID)
+		name, icon = sName, sIcon
+	end
 	if icon == 134708 or icon == 136248 or icon == 136025 then
 		return "MINE"
 	elseif icon == 136246 then
 		return "HERB"
 	elseif icon == 441139 then
 		return "ARCH"
+	elseif icon == 136245 or icon == 133888 then
+		return "FISH"
 	end
 
 	if isSafeString(name) and Gatherer and Gatherer.Locale and Gatherer.Locale.TrClient then
@@ -148,10 +208,20 @@ function Scanner.SetTooltip()
 			)
 			local knownType = knownObjId and Gatherer.Nodes.Objects and Gatherer.Nodes.Objects[knownObjId]
 			local tipType, isRedReq = detectGatherTypeFromTooltip()
+			local now = GetTime()
 			lastTip.tip = text
-			lastTip.time = GetTime()
+			lastTip.time = now
 			lastTip.gType = tipType or knownType
 			lastTip.isRedReq = isRedReq
+			if ((knownType == "OPEN" or knownType == "FISH") and not isFishingBobberName(text)) or isFishingPoolName(text) then
+				lastPoolTip.tip = text
+				lastPoolTip.time = now
+				lastPoolTip.objId = knownObjId
+				if lastFishingCast.time > 0 and (now - lastFishingCast.time) < 35 then
+					lastFishingCast.poolName = text
+					lastFishingCast.poolId = knownObjId
+				end
+			end
 			if Gatherer and Gatherer.Nodes and not Gatherer.Nodes.Names[text] and (tipType == "HERB" or tipType == "MINE") and Gatherer.Nodes.RegisterDynamicNode then
 				Gatherer.Nodes.RegisterDynamicNode(text, tipType, nil, knownObjId)
 			end
@@ -274,11 +344,27 @@ local function processLoot()
 	if lootProcessed then return end
 	lootProcessed = true
 
-	if IsFishingLoot and IsFishingLoot() then return end
+	local now = GetTime()
+	local isFishingPoolLoot = false
+	local fishingPoolName = nil
+	if IsFishingLoot and IsFishingLoot() then
+		if lastFishingCast.poolName and (now - (lastFishingCast.time or 0)) < 35 then
+			isFishingPoolLoot = true
+			fishingPoolName = lastFishingCast.poolName
+		elseif lastPoolTip.tip and (now - (lastPoolTip.time or 0)) < 35 then
+			isFishingPoolLoot = true
+			fishingPoolName = lastPoolTip.tip
+		else
+			lastFishingCast.time = 0
+			lastFishingCast.poolName = nil
+			lastFishingCast.poolId = nil
+			return
+		end
+	end
 
 	-- Verify loot source GUID: reject Mob corpses ("Creature-", "Vehicle-") and bag items ("Item-")
 	local isGameObjectLoot = false
-	if GetLootSourceInfo then
+	if not isFishingPoolLoot and GetLootSourceInfo then
 		local ok, srcGuid = pcall(GetLootSourceInfo, 1)
 		if ok and isSafeString(srcGuid) and srcGuid ~= "" then
 			if srcGuid:sub(1, 11) == "GameObject-" then
@@ -292,24 +378,29 @@ local function processLoot()
 	local nodeName = nil
 	local gType = nil
 	local hasRecentGatherCast = false
-	local now = GetTime()
 
-	if lastCast.target and (now - (lastCast.time or 0)) < 8 then
-		nodeName = lastCast.target
-		gType = lastCast.gType
-		if gType == "HERB" or gType == "MINE" or gType == "OPEN" or gType == "ARCH" then
-			hasRecentGatherCast = true
+	if isFishingPoolLoot then
+		nodeName = fishingPoolName
+		gType = "OPEN"
+		hasRecentGatherCast = true
+	else
+		if lastCast.target and (now - (lastCast.time or 0)) < 8 then
+			nodeName = lastCast.target
+			gType = lastCast.gType
+			if gType == "HERB" or gType == "MINE" or gType == "OPEN" or gType == "ARCH" then
+				hasRecentGatherCast = true
+			end
 		end
-	end
-	if not nodeName and lastTip.tip and (now - (lastTip.time or 0)) < 3 then
-		nodeName = lastTip.tip
-		gType = gType or lastTip.gType
+		if not nodeName and lastTip.tip and (now - (lastTip.time or 0)) < 3 then
+			nodeName = lastTip.tip
+			gType = gType or lastTip.gType
+		end
 	end
 	nodeName = cleanTooltipLine(nodeName)
 	if not nodeName then return end
 
 	-- Additional fallback guard for clients without GetLootSourceInfo: reject dead unit targets/mouseovers
-	if not isGameObjectLoot and UnitExists then
+	if not isGameObjectLoot and not isFishingPoolLoot and UnitExists then
 		if (UnitExists("target") and UnitIsDead and UnitIsDead("target"))
 			or (UnitExists("mouseover") and UnitIsDead and UnitIsDead("mouseover")) then
 			return
@@ -320,8 +411,9 @@ local function processLoot()
 		(Gatherer.Nodes.ResolveNodeByName and Gatherer.Nodes.ResolveNodeByName(nodeName))
 		or (Gatherer.Nodes.Names and Gatherer.Nodes.Names[nodeName])
 	)
-	-- On clients without GetLootSourceInfo, require either a known built-in node (< 900000) or an explicit recent HERB/MINE spellcast
-	if not isGameObjectLoot and not (resolvedId and resolvedId < 900000) and not (hasRecentGatherCast and (gType == "HERB" or gType == "MINE")) then
+	-- On clients without GetLootSourceInfo, require a built-in node (< 900000), a verified fishing pool, or a recent HERB/MINE cast
+	if not isGameObjectLoot and not isFishingPoolLoot and not (resolvedId and resolvedId < 900000)
+		and not (hasRecentGatherCast and (gType == "HERB" or gType == "MINE")) then
 		return
 	end
 
@@ -393,8 +485,8 @@ local function processLoot()
 		end
 	end
 
-	-- Never record unknown world objects that drop quest items or lack genuine herb/ore trade goods
-	if not (resolvedId and resolvedId < 900000) then
+	-- Never record unknown world objects that drop quest items or lack genuine herb/ore trade goods (unless verified fishing pool loot)
+	if not (resolvedId and resolvedId < 900000) and not isFishingPoolLoot then
 		if hasQuestItem or not lootDetectedType then
 			lastCast.target = nil
 			lastCast.gType = nil
@@ -420,8 +512,8 @@ local function processLoot()
 			if primaryItemID and Gatherer.Nodes.PrimaryItems and not Gatherer.Nodes.PrimaryItems[objId] then
 				Gatherer.Nodes.PrimaryItems[objId] = primaryItemID
 			end
-		elseif (gType == "HERB" or gType == "MINE") and Gatherer.Nodes.RegisterDynamicNode then
-			objId = Gatherer.Nodes.RegisterDynamicNode(nodeName, gType, primaryItemID)
+		elseif (gType == "HERB" or gType == "MINE" or isFishingPoolLoot) and Gatherer.Nodes.RegisterDynamicNode then
+			objId = Gatherer.Nodes.RegisterDynamicNode(nodeName, gType, primaryItemID, nil, isFishingPoolLoot)
 		else
 			return
 		end
@@ -434,6 +526,9 @@ local function processLoot()
 	lastTip.tip = nil
 	lastTip.gType = nil
 	lastTip.time = 0
+	lastFishingCast.time = 0
+	lastFishingCast.poolName = nil
+	lastFishingCast.poolId = nil
 
 	if not gType then return end
 
@@ -709,7 +804,22 @@ function Scanner.Init()
 				end
 				local spellGType = detectGatherTypeFromSpell(spellID)
 				target = cleanTooltipLine(target)
-				if isSafeString(target) and spellGType then
+				if spellGType == "FISH" then
+					local now = GetTime()
+					lastFishingCast.time = now
+					lastFishingCast.spellID = spellID
+					if lastPoolTip.tip and (now - (lastPoolTip.time or 0)) < 30 then
+						lastFishingCast.poolName = lastPoolTip.tip
+						lastFishingCast.poolId = lastPoolTip.objId
+					else
+						lastFishingCast.poolName = nil
+						lastFishingCast.poolId = nil
+					end
+					lastCast.target = nil
+					lastCast.spellID = nil
+					lastCast.gType = nil
+					lastCast.time = 0
+				elseif isSafeString(target) and spellGType then
 					lastCast.target = target
 					lastCast.spellID = spellID
 					lastCast.gType = spellGType
@@ -734,6 +844,9 @@ function Scanner.Init()
 			lastClick.tip = nil
 			lastClick.gType = nil
 			lastClick.time = 0
+			lastFishingCast.time = 0
+			lastFishingCast.poolName = nil
+			lastFishingCast.poolId = nil
 		elseif event == "UPDATE_MOUSEOVER_UNIT" then
 			Scanner.SetTooltip()
 		end
