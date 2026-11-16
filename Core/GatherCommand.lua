@@ -70,7 +70,12 @@ function Gatherer.Command.Process( command )
 		local GetSetting = Config.GetSetting
 		local Print = Gatherer.Util.ChatPrint
 		
-		if ( cmd == "help" ) then
+		if ( cmd == "route" or cmd == "routes" or cmd == "session" ) then
+			if Gatherer.RouteSessionUI and Gatherer.RouteSessionUI.Toggle then
+				Gatherer.RouteSessionUI.Toggle()
+			end
+			return
+		elseif ( cmd == "help" ) then
 			local useMinimap = GetSetting("minimap.enable") and "on" or "off"
 			local useMainmap = GetSetting("mainmap.enable") and "on" or "off"
 			local showHerbs = GetSetting("show.minimap.herb") and "on" or "off"
@@ -92,6 +97,7 @@ function Gatherer.Command.Process( command )
 			PrintUsageLine("options", nil, "show/hide UI Options dialog.")
 			PrintUsageLine("report", nil, "show/hide report dialog.")
 			PrintUsageLine("search", nil, "show/hide search dialog.")
+			PrintUsageLine("route", nil, "show/hide farm route & session tracker dialog.")
 			PrintUsageLine("import", nil, "import GatherMate2 & GatherMate2_Data nodes into Gatherer Reforged.")
 			PrintUsageLine("session", nil, "print current session statistics and Gold/Hour.")
 			PrintUsageLine("reset", nil, "reset current session statistics.")

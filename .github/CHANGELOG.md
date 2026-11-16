@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Zone Farm Route Solver & Gathering Session Tracker (`Core/GatherRoutes.lua`, `GUI/GatherRouteSession.lua`, `Core/GatherCommand.lua`, `GathererReforged.toc`)**: Added `/gather route` / `/gather session` to generate optimized zone farm loops (Nearest-Neighbor + 2-Opt) with WorldMap route lines, TomTom/Map waypoint stepping, and a live session tracker (nodes/hr, type breakdown, and looted item counts).
+
 ### Fixed
 - **Fishing School Recording (`Core/GatherScanner.lua`)**: Fixed `processLoot()` rejecting fishing pool loot because `GetLootSourceInfo(1)` does not return a `GameObject-` GUID for `IsFishingLoot()`, added `lastPoolTip` fallback and `C_Spell.GetSpellInfo` support, preserved `lastPoolTip` across brief unit mouseovers, and expanded German fishing pool keywords (`trümmer`, `elementar`, `schlamm`, `ölig`).
 
