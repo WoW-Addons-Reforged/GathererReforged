@@ -3407,7 +3407,7 @@ do
 		return bestId or nil
 	end
 
-	function Gatherer.Nodes.RegisterDynamicNode(nodeName, gType, primaryItemID, explicitID)
+	function Gatherer.Nodes.RegisterDynamicNode(nodeName, gType, primaryItemID, explicitID, allowDynamicOpen)
 		if not nodeName or nodeName == "" or not gType then return nil end
 		nodeName = stripMarkup(nodeName)
 		if nodeName == "" then return nil end
@@ -3425,8 +3425,8 @@ do
 			return existing
 		end
 
-		-- Never dynamically register unknown "OPEN" world objects (e.g. quest objects/crates) unless explicitly imported
-		if not explicitID and gType ~= "HERB" and gType ~= "MINE" then
+		-- Never dynamically register unknown "OPEN" world objects (e.g. quest objects/crates) unless explicitly imported or verified (e.g. fishing pools)
+		if not explicitID and not allowDynamicOpen and gType ~= "HERB" and gType ~= "MINE" then
 			return nil
 		end
 

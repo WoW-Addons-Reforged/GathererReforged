@@ -1398,7 +1398,7 @@ function Integrations.SetupGatherMate2LiveSync()
 						objID = Gatherer.Nodes.Names[name]
 						gType = (objID and Gatherer.Nodes.Objects[objID]) or DB_TYPE_TO_GTYPE[nodeType] or "OPEN"
 						if not objID and Gatherer.Nodes.RegisterDynamicNode then
-							objID = Gatherer.Nodes.RegisterDynamicNode(name, gType)
+							objID = Gatherer.Nodes.RegisterDynamicNode(name, gType, nil, nil, nodeType == "Fishing")
 						end
 					end
 

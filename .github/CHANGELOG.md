@@ -5,15 +5,13 @@ All notable changes to **Gatherer Reforged** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-11-18
 
 ### Added
 - **Zone Farm Route Solver & Gathering Session Tracker (`Core/GatherRoutes.lua`, `GUI/GatherRouteSession.lua`, `Core/GatherCommand.lua`, `GathererReforged.toc`)**: Added `/gather route` / `/gather session` to generate optimized zone farm loops (Nearest-Neighbor + 2-Opt) with WorldMap route lines, TomTom/Map waypoint stepping, and a live session tracker (nodes/hr, type breakdown, and looted item counts).
 
 ### Fixed
 - **Fishing School Recording (`Core/GatherScanner.lua`)**: Fixed `processLoot()` rejecting fishing pool loot because `GetLootSourceInfo(1)` does not return a `GameObject-` GUID for `IsFishingLoot()`, added `lastPoolTip` fallback and `C_Spell.GetSpellInfo` support, preserved `lastPoolTip` across brief unit mouseovers, and expanded German fishing pool keywords (`trümmer`, `elementar`, `schlamm`, `ölig`).
-
-### Fixed
 - **Fishing School / Pool Recording & Live Bridge (`Core/GatherScanner.lua`, `Data/GatherNodes.lua`, `Core/GatherIntegrations.lua`)**:
   - Replaced the unconditional `IsFishingLoot()` early return in `processLoot()` so **Fishing Schools / Pools / Wreckage** are recorded with their exact coordinates, primary fish icon, and loot drops, while open-water fishing without a hovered pool continues to be ignored.
   - Added dedicated `FISHING_SPELLS` detection (including empty-target `UNIT_SPELLCAST_SENT` casts and fishing spell icons), `lastPoolTip` / `lastFishingCast` tracking across bobber hover/cast duration, multilingual pool keyword matching, and bobber-name filtering.
